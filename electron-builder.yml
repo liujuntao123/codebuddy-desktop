@@ -1,0 +1,37 @@
+appId: com.liujuntao.codebuddy-harness
+productName: CodeBuddy Harness
+copyright: Copyright © 2026 liujuntao123
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - main.js
+  - package.json
+  - build/icon.png
+
+extraResources:
+  - from: vendor/codebuddy-code
+    to: codebuddy-code
+    filter:
+      - "**/*"
+      - "!node_modules/.bin"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: CodeBuddy Harness
+
+portable:
+  artifactName: ${productName}-${version}-Portable.${ext}

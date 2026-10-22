@@ -1,0 +1,22 @@
+{
+  "name": "codebuddy-harness",
+  "productName": "CodeBuddy Harness",
+  "version": "1.0.0",
+  "description": "Self-contained Windows desktop client for CodeBuddy Code — tray-resident, zero dependencies",
+  "main": "main.js",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/liujuntao123/codebuddy-harness.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "prepare": "node scripts/prepare-vendor.js",
+    "icon": "node make-icons.js",
+    "dist": "npm run prepare && electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "*",
+    "electron-builder": "*"
+  }
+}
