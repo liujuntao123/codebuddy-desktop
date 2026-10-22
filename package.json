@@ -1,13 +1,13 @@
 {
-  "name": "codebuddy-harness",
-  "productName": "CodeBuddy Harness",
-  "version": "1.0.0",
+  "name": "codebuddy-desktop",
+  "productName": "codebuddy-desktop",
+  "version": "1.1.0",
   "description": "Self-contained Windows desktop client for CodeBuddy Code — tray-resident, zero dependencies",
   "main": "main.js",
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/liujuntao123/codebuddy-harness.git"
+    "url": "https://github.com/liujuntao123/codebuddy-desktop.git"
   },
   "scripts": {
     "start": "electron .",

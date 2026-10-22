@@ -1,5 +1,5 @@
-appId: com.liujuntao.codebuddy-harness
-productName: CodeBuddy Harness
+appId: com.liujuntao.codebuddy-desktop
+productName: codebuddy-desktop
 copyright: Copyright © 2026 liujuntao123
 
 directories:
@@ -31,7 +31,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: CodeBuddy Harness
+  shortcutName: codebuddy-desktop
 
 portable:
   artifactName: ${productName}-${version}-Portable.${ext}

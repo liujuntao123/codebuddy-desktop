@@ -1,4 +1,4 @@
-// CodeBuddy Harness — Electron main process.
+// codebuddy-desktop — Electron main process.
 // Self-contained client: bundles the CodeBuddy CLI (vendor/codebuddy-code).
 // The CLI is executed with Electron's own node binary (ELECTRON_RUN_AS_NODE),
 // so no system Node, npm install or global codebuddy is required.
@@ -184,7 +184,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 640,
     icon: ICON_PNG,
-    title: 'CodeBuddy Harness',
+    title: 'codebuddy-desktop',
     backgroundColor: '#16181d',
     autoHideMenuBar: true,
     show: false,
@@ -246,7 +246,7 @@ function refreshTrayMenu() {
       label: '重启服务',
       click: () => {
         stopServer(() => startServer((err) => {
-          if (err) dialog.showErrorBox('CodeBuddy Harness', '重启服务失败: ' + err.message);
+          if (err) dialog.showErrorBox('codebuddy-desktop', '重启服务失败: ' + err.message);
           refreshTrayMenu();
           if (win && !err) win.loadURL(webRoot());
         }));
@@ -274,7 +274,7 @@ function refreshTrayMenu() {
     },
   ]);
   tray.setContextMenu(menu);
-  tray.setToolTip('CodeBuddy Harness · ' + (serverUp ? '运行中' : '已停止'));
+  tray.setToolTip('codebuddy-desktop · ' + (serverUp ? '运行中' : '已停止'));
 }
 
 function createTray() {
@@ -292,11 +292,11 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     gwPassword = readGwPassword();
-    log('=== CodeBuddy Harness starting ===');
+    log('=== codebuddy-desktop starting ===');
     startServer((err, how) => {
       if (err) {
         log('server start failed: ' + err.message);
-        dialog.showErrorBox('CodeBuddy Harness', '服务启动失败:\n' + err.message + '\n\n日志: ' + SERVER_LOG);
+        dialog.showErrorBox('codebuddy-desktop', '服务启动失败:\n' + err.message + '\n\n日志: ' + SERVER_LOG);
       } else {
         log('server ' + how);
       }
