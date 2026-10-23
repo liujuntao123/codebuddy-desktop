@@ -16,8 +16,9 @@ const path = require('path');
 const IS_PACKAGED = app.isPackaged;
 const APP_ROOT = IS_PACKAGED ? path.dirname(process.execPath) : __dirname;
 
-// Port policy: start at BASE_PORT and walk upward. A healthy CLI already
-// listening on a candidate port is reused; a port held by anything else is
+// Port policy: try the port(s) the CLI itself remembers
+// (~/.codebuddy/web-ui-port.json) first, then walk upward from BASE_PORT.
+// A healthy CLI already listening is reused; a port held by anything else is
 // skipped (never killed), so a separately installed CLI is left untouched.
 const BASE_PORT = parseInt(process.env.CODEBUDDY_DESKTOP_PORT, 10) || 8317;
 const PORT_MAX_TRIES = 20;
@@ -90,22 +91,47 @@ function isListening(port, cb) {
   sock.once('error', () => finish(false));
 }
 
-// Walk BASE_PORT..BASE_PORT+PORT_MAX_TRIES-1 and return { port, reuse }.
+// Ports the CLI itself remembers for its Web UI (~/.codebuddy/web-ui-port.json).
+// These are the most likely places to find a CLI the user already started.
+function stablePorts() {
+  try {
+    const file = path.join(app.getPath('home'), '.codebuddy', 'web-ui-port.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const list = Array.isArray(data.ports) ? data.ports : [data.port];
+    return list
+      .map((p) => parseInt(p, 10))
+      .filter((p) => Number.isInteger(p) && p > 0 && p <= 65535);
+  } catch (_) { return []; }
+}
+
+// Walk the CLI's remembered ports first, then BASE_PORT..BASE_PORT+N-1.
+// A healthy CLI is reused; a port held by anything else is skipped, never killed.
 function selectPort(cb) {
-  const tryPort = (port) => {
-    if (port >= BASE_PORT + PORT_MAX_TRIES) {
-      return cb(new Error(`no usable port in ${BASE_PORT}-${BASE_PORT + PORT_MAX_TRIES - 1}`));
+  const candidates = [];
+  const push = (port) => {
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return;
+    if (!candidates.includes(port)) candidates.push(port);
+  };
+  const remembered = stablePorts();
+  if (remembered.length) log('CLI remembered web-ui port(s): ' + remembered.join(', '));
+  remembered.forEach(push);
+  for (let i = 0; i < PORT_MAX_TRIES; i++) push(BASE_PORT + i);
+
+  const tryAt = (i) => {
+    if (i >= candidates.length) {
+      return cb(new Error(`no usable port (tried ${candidates.join(', ')})`));
     }
+    const port = candidates[i];
     isListening(port, (busy) => {
       if (!busy) return cb(null, { port, reuse: false });
       checkHealthy(port, (ok) => {
         if (ok) return cb(null, { port, reuse: true });
-        log(`port ${port} is taken by a non-CLI listener; trying ${port + 1}`);
-        tryPort(port + 1);
+        log(`port ${port} is taken by a non-CLI listener; trying next`);
+        tryAt(i + 1);
       });
     });
   };
-  tryPort(BASE_PORT);
+  tryAt(0);
 }
 
 function killTree(pid) {

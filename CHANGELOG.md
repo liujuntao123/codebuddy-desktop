@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-10-23
+
+### Added
+- `auto-update-cli.yml`: daily check of npm for a newer bundled CLI, then bump → build → tag → release
+- Bundled CLI version pinned in `package.json` (`codebuddyCliVersion`); `build.yml` verifies it matches the download
+
+### Changed
+- Port selection now tries the ports the CLI remembers in `~/.codebuddy/web-ui-port.json` first, so an already running CLI is reused instead of a second server being spawned
+- README front matter now describes the one-click start instead of install-time details
+
 ## [1.1.1] - 2026-10-23
 
 ### Fixed

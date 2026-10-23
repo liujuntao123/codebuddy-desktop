@@ -1,0 +1,116 @@
+name: Auto-update bundled CLI
+
+# Checks the npm registry for a newer @tencent-ai/codebuddy-code. When one is
+# found: bumps the pinned CLI version and app version, builds the installers,
+# then commits, tags and publishes a Release.
+#
+# The push is made with GITHUB_TOKEN, which deliberately does NOT trigger
+# build.yml (GitHub suppresses workflow runs caused by GITHUB_TOKEN). That keeps
+# one release per update instead of two. If you switch to a PAT here, disable
+# the tag trigger in build.yml or you will get a duplicate release.
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # daily, 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-update-cli
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Check for a newer CLI
+        id: check
+        shell: bash
+        run: |
+          LATEST=$(npm view @tencent-ai/codebuddy-code version)
+          CURRENT=$(node -p "require('./package.json').codebuddyCliVersion")
+          echo "npm latest: $LATEST / bundled: $CURRENT"
+          if node -e '
+            const [a, b] = process.argv.slice(1).map((v) => v.split("-")[0].split(".").map(Number));
+            for (let i = 0; i < 3; i++) {
+              if (a[i] > b[i]) process.exit(0);
+              if (a[i] < b[i]) process.exit(1);
+            }
+            process.exit(1);
+          ' "$LATEST" "$CURRENT"; then
+            echo "update=true" >> "$GITHUB_OUTPUT"
+            echo "cli=$LATEST" >> "$GITHUB_OUTPUT"
+          else
+            echo "update=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump versions and changelog
+        if: steps.check.outputs.update == 'true'
+        shell: bash
+        run: node scripts/bump-cli-version.js "${{ steps.check.outputs.cli }}"
+
+      - name: Install dependencies
+        if: steps.check.outputs.update == 'true'
+        run: npm ci
+
+      - name: Download CLI
+        if: steps.check.outputs.update == 'true'
+        shell: bash
+        run: node scripts/prepare-vendor.js
+
+      - name: Build Windows packages
+        if: steps.check.outputs.update == 'true'
+        run: npx electron-builder --win --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Commit only after a successful build, so a broken build never leaves a
+      # version bump (or a tag) behind.
+      - name: Commit, tag and push
+        if: steps.check.outputs.update == 'true'
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json CHANGELOG.md
+          git commit -m "release: v${VERSION}"
+          git tag "v${VERSION}"
+          git push origin HEAD:main --tags
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Extract changelog
+        if: steps.check.outputs.update == 'true'
+        id: changelog
+        shell: bash
+        run: |
+          SECTION=$(sed -n "/## \[${VERSION}\]/,/## \[/p" CHANGELOG.md | sed '$d' | sed '1d')
+          if [ -z "$SECTION" ]; then
+            SECTION="Bundled CodeBuddy CLI ${{ steps.check.outputs.cli }}"
+          fi
+          echo "body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$SECTION" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        if: steps.check.outputs.update == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          body: ${{ steps.changelog.outputs.body }}
+          draft: false
+          files: |
+            dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,7 +6,7 @@
 
 > **声明**：本项目并非逆向或破解，只是对 CodeBuddy 的一个客户端封装，能够让用户方便地一键启动命令行以及后台运行。所有代码均基于 CodeBuddy 官方公开发布的 npm 包和 Electron 框架，不涉及任何逆向工程或版权规避，因此用户可以放心使用。
 
-客户端内置了完整的 CodeBuddy CLI（约 280MB）——**目标机器零前置依赖**：不需要安装 Node.js、npm，也不需要全局安装 codebuddy。
+下载、双击、直接用。首次启动会自动拉起 CodeBuddy CLI 并打开界面，不需要额外安装、配置，也没有需要手动执行的准备步骤。
 
 ## 功能
 
@@ -70,15 +70,19 @@ npm run dist       # 准备 vendor + electron-builder --win
 ├── main.js               # Electron 主进程
 ├── electron-builder.yml  # 打包配置
 ├── scripts/
-│   └── prepare-vendor.js # CI/本地开发自动下载 CLI
+│   ├── prepare-vendor.js     # CI/本地开发下载指定版本的 CLI
+│   └── bump-cli-version.js   # 更新内置 CLI 版本号 + CHANGELOG
 ├── build/
 │   ├── icon.ico          # Windows 应用图标
 │   └── icon.png          # 托盘图标
 ├── vendor/               # （gitignore）CodeBuddy CLI 运行时
 │   └── codebuddy-code/
 └── .github/workflows/
-    └── build.yml         # CI: tag push → build → release
+    ├── build.yml           # CI: tag push → build → release
+    └── auto-update-cli.yml # CI: 定时检查 CLI 新版本 → 自动发版
 ```
+
+内置 CLI 版本固定在 `package.json` 的 `codebuddyCliVersion`，构建前由 `prepare-vendor.js` 按该版本下载，`build.yml` 会校验实际版本与固定值一致，避免版本漂移。
 
 ### 发布流程
 
@@ -91,6 +95,10 @@ npm run dist       # 准备 vendor + electron-builder --win
    git push origin main --tags
    ```
 4. GitHub Actions 自动：下载 CLI → 打包 → 从 CHANGELOG.md 提取 Release Notes → 创建 Release 并上传 exe
+
+### 内置 CLI 自动跟进
+
+`auto-update-cli.yml` 每天 UTC 03:00 检查 npm 上 `@tencent-ai/codebuddy-code` 是否有新版本；有则依次执行：更新 `codebuddyCliVersion` 与应用补丁版本号、写入 CHANGELOG、重新下载并打包、构建成功后再提交并打 tag、发布 Release。也可在 Actions 页面手动触发。
 
 ## 许可证
 

@@ -28,6 +28,19 @@ jobs:
         run: node scripts/prepare-vendor.js
         shell: bash
 
+      - name: Verify bundled CLI version
+        shell: bash
+        run: |
+          node -e '
+            const want = require("./package.json").codebuddyCliVersion;
+            const have = require("./vendor/codebuddy-code/package.json").version;
+            if (want !== have) {
+              console.error(`bundled CLI ${have} does not match pinned ${want}`);
+              process.exit(1);
+            }
+            console.log(`✓ CLI ${have}`);
+          '
+
       - name: Build Windows packages
         run: npx electron-builder --win --publish never
         env:

@@ -6,7 +6,7 @@ Self-contained Windows desktop client for [CodeBuddy Code](https://www.npmjs.com
 
 > **Disclaimer**: This project is not a reverse-engineering or cracking effort. It is simply a client-side wrapper around CodeBuddy that allows users to conveniently launch the CLI and run it in the background with one click. All code is based on the officially published npm package and the Electron framework, with no reverse engineering or copyright circumvention involved. Users can rest assured.
 
-The client bundles the full CodeBuddy CLI (~280MB) — **zero external dependencies** on the target machine: no Node.js, no npm, no global install required.
+Download, double-click, and you are in. CodeBuddy CLI starts with the app and the Web UI opens automatically — nothing else to install, configure, or prepare.
 
 ## Features
 
@@ -70,15 +70,19 @@ Output goes to `dist/`.
 ├── main.js               # Electron main process
 ├── electron-builder.yml  # Build configuration
 ├── scripts/
-│   └── prepare-vendor.js # Downloads CLI for local dev / CI
+│   ├── prepare-vendor.js     # downloads the pinned CLI for dev / CI
+│   └── bump-cli-version.js   # bumps bundled CLI version + CHANGELOG
 ├── build/
 │   ├── icon.ico          # Windows app icon
 │   └── icon.png          # Tray icon
 ├── vendor/               # (gitignored) CodeBuddy CLI runtime
 │   └── codebuddy-code/
 └── .github/workflows/
-    └── build.yml         # CI: build + release on tag push
+    ├── build.yml           # CI: build + release on tag push
+    └── auto-update-cli.yml # CI: daily CLI version check → release
 ```
+
+The bundled CLI version is pinned in `package.json` (`codebuddyCliVersion`); `prepare-vendor.js` installs exactly that version and `build.yml` fails if the downloaded version differs.
 
 ### Release workflow
 
@@ -91,6 +95,10 @@ Output goes to `dist/`.
    git push origin main --tags
    ```
 4. GitHub Actions builds NSIS + portable exes and creates a Release with the changelog
+
+### Automatic CLI updates
+
+`auto-update-cli.yml` checks npm for a newer `@tencent-ai/codebuddy-code` daily at 03:00 UTC. When one exists it bumps `codebuddyCliVersion` and the app patch version, writes a CHANGELOG entry, rebuilds, and only after a successful build commits, tags and publishes a Release. It can also be run manually from the Actions tab.
 
 ## License
 
