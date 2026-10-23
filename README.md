@@ -4,7 +4,7 @@
 
 [CodeBuddy Code](https://www.npmjs.com/package/@tencent-ai/codebuddy-code)（腾讯 CodeBuddy CLI）的自包含 Windows 桌面客户端。
 
-> **声明**：本项目并非逆向或破解，只是对 CodeBuddy 的一个客户端封装，能够让用户方便地一键启动命令行以及后台运行。所有代码均基于 CodeBuddy 官方公开发布的 npm 包和 Electron 框架，不涉及任何逆向工程或版权规避，因此用户可以放心使用。
+> **声明**：本项目并非逆向或破解，只是对 CodeBuddy 的一个客户端封装，能够让用户方便地一键启动命令行以及后台运行。所有代码均基于 CodeBuddy 官方公开发布的 npm 包和 Electron 框架，不涉及任何逆向工程或版权规避。
 
 下载、双击、直接用。首次启动会自动拉起 CodeBuddy CLI 并打开界面，不需要额外安装、配置，也没有需要手动执行的准备步骤。
 
