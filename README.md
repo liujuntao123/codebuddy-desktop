@@ -103,3 +103,6 @@ npm run dist       # 准备 vendor + electron-builder --win
 ## 许可证
 
 [MIT](LICENSE) — 内置的 CodeBuddy Code CLI 遵循其自身的[许可协议](https://www.npmjs.com/package/@tencent-ai/codebuddy-code)。
+
+## 友情链接
+学 AI，上 L 站：https://linux.do/
