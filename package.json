@@ -1,7 +1,7 @@
 {
   "name": "codebuddy-desktop",
   "productName": "codebuddy-desktop",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Self-contained Windows desktop client for CodeBuddy Code — tray-resident, zero dependencies",
   "main": "main.js",
   "private": true,

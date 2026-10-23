@@ -10,10 +10,17 @@ const { app, BrowserWindow, Tray, Menu, dialog, nativeImage, shell } = require('
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 const http = require('http');
+const net = require('net');
 const path = require('path');
 
-const APP_ROOT = IS_PACKAGED ? path.dirname(process.execPath) : __dirname;
 const IS_PACKAGED = app.isPackaged;
+const APP_ROOT = IS_PACKAGED ? path.dirname(process.execPath) : __dirname;
+
+// Port policy: start at BASE_PORT and walk upward. A healthy CLI already
+// listening on a candidate port is reused; a port held by anything else is
+// skipped (never killed), so a separately installed CLI is left untouched.
+const BASE_PORT = parseInt(process.env.CODEBUDDY_DESKTOP_PORT, 10) || 8317;
+const PORT_MAX_TRIES = 20;
 // In dev: vendor/ sits next to main.js; in packaged builds, extraResources
 // places it under resources/codebuddy-code (outside the asar archive).
 const CLI_BIN = IS_PACKAGED
@@ -28,9 +35,11 @@ let win = null;
 let tray = null;
 let serverProc = null;
 let weStarted = false;
+let externalServer = false;
 let manualStop = false;
 let gwPassword = '';
 let serverUp = false;
+let PORT = BASE_PORT;
 
 function log(line) {
   try { fs.appendFileSync(SERVER_LOG, `[${new Date().toISOString()}] ${line}\n`); } catch (_) { /* ignore */ }
@@ -43,10 +52,10 @@ function readGwPassword() {
   } catch (_) { return ''; }
 }
 
-function apiGet(urlPath, cb) {
+function apiGet(port, urlPath, cb) {
   const headers = { 'x-codebuddy-request': '1' };
   if (gwPassword) headers.Authorization = 'Bearer ' + gwPassword;
-  const req = http.get({ host: '127.0.0.1', port: PORT, path: urlPath, headers, timeout: 3000 }, (res) => {
+  const req = http.get({ host: '127.0.0.1', port, path: urlPath, headers, timeout: 3000 }, (res) => {
     let body = '';
     res.on('data', (c) => { body += c; });
     res.on('end', () => {
@@ -59,21 +68,44 @@ function apiGet(urlPath, cb) {
   req.on('timeout', () => { req.destroy(); cb(new Error('timeout')); });
 }
 
-function checkHealthy(cb) {
-  apiGet('/api/v1/health', (err, body, status) => {
+function checkHealthy(port, cb) {
+  apiGet(port, '/api/v1/health', (err, body, status) => {
     cb(!err && status === 200);
   });
 }
 
-function listenerPid() {
-  try {
-    const out = execSync(
-      `powershell -NoProfile -Command "(Get-NetTCPConnection -LocalPort ${PORT} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess"`,
-      { encoding: 'utf8', windowsHide: true }
-    ).trim();
-    const pid = parseInt(out, 10);
-    return Number.isFinite(pid) && pid > 0 ? pid : null;
-  } catch (_) { return null; }
+// True when anything (not just our CLI) is listening on the port.
+function isListening(port, cb) {
+  const sock = net.connect({ host: '127.0.0.1', port });
+  let settled = false;
+  const finish = (busy) => {
+    if (settled) return;
+    settled = true;
+    sock.destroy();
+    cb(busy);
+  };
+  sock.setTimeout(700);
+  sock.once('connect', () => finish(true));
+  sock.once('timeout', () => finish(true));
+  sock.once('error', () => finish(false));
+}
+
+// Walk BASE_PORT..BASE_PORT+PORT_MAX_TRIES-1 and return { port, reuse }.
+function selectPort(cb) {
+  const tryPort = (port) => {
+    if (port >= BASE_PORT + PORT_MAX_TRIES) {
+      return cb(new Error(`no usable port in ${BASE_PORT}-${BASE_PORT + PORT_MAX_TRIES - 1}`));
+    }
+    isListening(port, (busy) => {
+      if (!busy) return cb(null, { port, reuse: false });
+      checkHealthy(port, (ok) => {
+        if (ok) return cb(null, { port, reuse: true });
+        log(`port ${port} is taken by a non-CLI listener; trying ${port + 1}`);
+        tryPort(port + 1);
+      });
+    });
+  };
+  tryPort(BASE_PORT);
 }
 
 function killTree(pid) {
@@ -93,6 +125,7 @@ function spawnServer() {
     cwd: require('os').homedir(),
   });
   weStarted = true;
+  externalServer = false;
   manualStop = false;
   const startedAt = Date.now();
   const logStream = fs.createWriteStream(SERVER_LOG, { flags: 'a' });
@@ -126,7 +159,7 @@ let crashStreak = 0;
 function waitForHealthy(left, cb) {
   if (left <= 0) return cb(new Error('server did not become healthy in time (see server.log)'));
   setTimeout(() => {
-    checkHealthy((ok) => {
+    checkHealthy(PORT, (ok) => {
       if (ok) return cb(null);
       waitForHealthy(left - 1, cb);
     });
@@ -134,9 +167,12 @@ function waitForHealthy(left, cb) {
 }
 
 function startServer(cb) {
-  checkHealthy((ok) => {
-    if (ok) {
+  selectPort((err, picked) => {
+    if (err) return cb(err);
+    PORT = picked.port;
+    if (picked.reuse) {
       weStarted = false;
+      externalServer = true;
       serverUp = true;
       log('reusing healthy server already listening on port ' + PORT);
       return cb(null, 'reused');
@@ -144,31 +180,23 @@ function startServer(cb) {
     if (!fs.existsSync(CLI_BIN)) {
       return cb(new Error('bundled CLI not found: ' + CLI_BIN));
     }
-    // A stale/foreign listener would block our port: clear it first.
-    const pid = listenerPid();
-    if (pid) {
-      log('port ' + PORT + ' held by unhealthy pid ' + pid + ', stopping it');
-      killTree(pid);
-    }
     spawnServer();
-    waitForHealthy(60, (err) => {
-      if (err) return cb(err);
+    waitForHealthy(60, (e) => {
+      if (e) return cb(e);
       serverUp = true;
       cb(null, 'started');
     });
   });
 }
 
+// Only ever stops a server this process spawned. An external CLI that we
+// reused is left alone.
 function stopServer(cb) {
   manualStop = true;
-  if (serverProc && weStarted) {
-    killTree(serverProc.pid);
-    serverProc = null;
-    weStarted = false;
-  } else {
-    const pid = listenerPid();
-    if (pid) killTree(pid);
-  }
+  if (serverProc) killTree(serverProc.pid);
+  serverProc = null;
+  weStarted = false;
+  externalServer = false;
   serverUp = false;
   if (cb) setTimeout(cb, 500);
 }
@@ -241,9 +269,13 @@ function refreshTrayMenu() {
   const menu = Menu.buildFromTemplate([
     { label: '打开主窗口', click: () => showWindow() },
     { type: 'separator' },
-    { label: serverUp ? `服务运行中 · 127.0.0.1:${PORT}` : '服务未运行', enabled: false },
+    {
+      label: serverUp ? `服务运行中 · 127.0.0.1:${PORT}${externalServer ? '（外部实例）' : ''}` : '服务未运行',
+      enabled: false,
+    },
     {
       label: '重启服务',
+      enabled: !externalServer,
       click: () => {
         stopServer(() => startServer((err) => {
           if (err) dialog.showErrorBox('codebuddy-desktop', '重启服务失败: ' + err.message);
@@ -254,6 +286,7 @@ function refreshTrayMenu() {
     },
     {
       label: '停止服务',
+      enabled: !externalServer,
       click: () => stopServer(() => refreshTrayMenu()),
     },
     { type: 'separator' },
